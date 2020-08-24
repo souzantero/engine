@@ -24,7 +24,7 @@ class AndroidSurfaceMock final : public GPUSurfaceGLDelegate,
 
   MOCK_METHOD(std::unique_ptr<Surface>,
               CreateGPUSurface,
-              (GrContext * gr_context),
+              (GrDirectContext * gr_context),
               (override));
 
   MOCK_METHOD(bool, OnScreenSurfaceResize, (const SkISize& size), (override));
@@ -48,7 +48,7 @@ class AndroidSurfaceMock final : public GPUSurfaceGLDelegate,
   bool GLContextPresent() override;
 
   // |GPUSurfaceGLDelegate|
-  intptr_t GLContextFBO() const override;
+  intptr_t GLContextFBO(GLFrameInfo frame_info) const override;
 
   // |GPUSurfaceGLDelegate|
   ExternalViewEmbedder* GetExternalViewEmbedder() override;

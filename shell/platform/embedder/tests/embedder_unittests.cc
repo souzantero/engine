@@ -1,6 +1,7 @@
 // Copyright 2013 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+// FLUTTER_NOLINT
 
 #define FML_USED_ON_EMBEDDER
 
@@ -1022,7 +1023,7 @@ TEST_F(EmbedderTest, CompositorMustBeAbleToRenderToSoftwareBuffer) {
 }
 
 static sk_sp<SkSurface> CreateRenderSurface(const FlutterLayer& layer,
-                                            GrContext* context) {
+                                            GrDirectContext* context) {
   const auto image_info =
       SkImageInfo::MakeN32Premul(layer.size.width, layer.size.height);
   auto surface = context ? SkSurface::MakeRenderTarget(
@@ -1259,7 +1260,8 @@ TEST_F(EmbedderTest, CompositorMustBeAbleToRenderKnownScene) {
       });
 
   context.GetCompositor().SetPlatformViewRendererCallback(
-      [&](const FlutterLayer& layer, GrContext* context) -> sk_sp<SkImage> {
+      [&](const FlutterLayer& layer,
+          GrDirectContext* context) -> sk_sp<SkImage> {
         auto surface = CreateRenderSurface(layer, context);
         auto canvas = surface->getCanvas();
         FML_CHECK(canvas != nullptr);
@@ -1431,7 +1433,7 @@ TEST_F(EmbedderTest,
       });
 
   context.GetCompositor().SetPlatformViewRendererCallback(
-      [&](const FlutterLayer& layer, GrContext*
+      [&](const FlutterLayer& layer, GrDirectContext*
           /* don't use because software compositor */) -> sk_sp<SkImage> {
         auto surface = CreateRenderSurface(
             layer, nullptr /* null because software compositor */);
@@ -1747,7 +1749,8 @@ TEST_F(EmbedderTest, CompositorMustBeAbleToRenderWithPlatformLayerOnBottom) {
       });
 
   context.GetCompositor().SetPlatformViewRendererCallback(
-      [&](const FlutterLayer& layer, GrContext* context) -> sk_sp<SkImage> {
+      [&](const FlutterLayer& layer,
+          GrDirectContext* context) -> sk_sp<SkImage> {
         auto surface = CreateRenderSurface(layer, context);
         auto canvas = surface->getCanvas();
         FML_CHECK(canvas != nullptr);
@@ -1916,7 +1919,8 @@ TEST_F(EmbedderTest,
       });
 
   context.GetCompositor().SetPlatformViewRendererCallback(
-      [&](const FlutterLayer& layer, GrContext* context) -> sk_sp<SkImage> {
+      [&](const FlutterLayer& layer,
+          GrDirectContext* context) -> sk_sp<SkImage> {
         auto surface = CreateRenderSurface(layer, context);
         auto canvas = surface->getCanvas();
         FML_CHECK(canvas != nullptr);
@@ -2218,7 +2222,8 @@ TEST_F(EmbedderTest, CanRenderGradientWithCompositorOnNonRootLayer) {
       });
 
   context.GetCompositor().SetPlatformViewRendererCallback(
-      [&](const FlutterLayer& layer, GrContext* context) -> sk_sp<SkImage> {
+      [&](const FlutterLayer& layer,
+          GrDirectContext* context) -> sk_sp<SkImage> {
         auto surface = CreateRenderSurface(layer, context);
         auto canvas = surface->getCanvas();
         FML_CHECK(canvas != nullptr);
@@ -2328,7 +2333,8 @@ TEST_F(EmbedderTest, CanRenderGradientWithCompositorOnNonRootLayerWithXform) {
       });
 
   context.GetCompositor().SetPlatformViewRendererCallback(
-      [&](const FlutterLayer& layer, GrContext* context) -> sk_sp<SkImage> {
+      [&](const FlutterLayer& layer,
+          GrDirectContext* context) -> sk_sp<SkImage> {
         auto surface = CreateRenderSurface(layer, context);
         auto canvas = surface->getCanvas();
         FML_CHECK(canvas != nullptr);
@@ -2990,7 +2996,8 @@ TEST_F(EmbedderTest, VerifyB143464703WithSoftwareBackend) {
       });
 
   context.GetCompositor().SetPlatformViewRendererCallback(
-      [](const FlutterLayer& layer, GrContext* context) -> sk_sp<SkImage> {
+      [](const FlutterLayer& layer,
+         GrDirectContext* context) -> sk_sp<SkImage> {
         auto surface = CreateRenderSurface(
             layer, nullptr /* null because software compositor */);
         auto canvas = surface->getCanvas();
@@ -4343,6 +4350,61 @@ TEST_F(EmbedderTest, CanLaunchAndShutdownWithAValidElfSource) {
   // Wait for the root isolate to launch.
   latch.Wait();
   engine.reset();
+}
+
+TEST_F(EmbedderTest, FrameInfoContainsValidWidthAndHeight) {
+  auto& context = GetEmbedderContext();
+
+  EmbedderConfigBuilder builder(context);
+  builder.SetOpenGLRendererConfig(SkISize::Make(600, 1024));
+  builder.SetDartEntrypoint("push_frames_over_and_over");
+
+  const auto root_surface_transformation =
+      SkMatrix().preTranslate(0, 1024).preRotate(-90, 0, 0);
+
+  context.SetRootSurfaceTransformation(root_surface_transformation);
+
+  auto engine = builder.LaunchEngine();
+
+  // Send a window metrics events so frames may be scheduled.
+  FlutterWindowMetricsEvent event = {};
+  event.struct_size = sizeof(event);
+  event.width = 1024;
+  event.height = 600;
+  event.pixel_ratio = 1.0;
+  ASSERT_EQ(FlutterEngineSendWindowMetricsEvent(engine.get(), &event),
+            kSuccess);
+  ASSERT_TRUE(engine.is_valid());
+
+  constexpr size_t frames_expected = 10;
+  fml::CountDownLatch frame_latch(frames_expected);
+  size_t frames_seen = 0;
+  context.AddNativeCallback("SignalNativeTest",
+                            CREATE_NATIVE_ENTRY([&](Dart_NativeArguments args) {
+                              frames_seen++;
+                              frame_latch.CountDown();
+                            }));
+  frame_latch.Wait();
+
+  ASSERT_EQ(frames_expected, frames_seen);
+  ASSERT_EQ(context.GetGLFBOFrameInfos().size(), frames_seen);
+
+  for (FlutterFrameInfo frame_info : context.GetGLFBOFrameInfos()) {
+    // width and height are rotated by 90 deg
+    ASSERT_EQ(frame_info.size.width, event.height);
+    ASSERT_EQ(frame_info.size.height, event.width);
+  }
+}
+
+TEST_F(EmbedderTest, MustNotRunWithBothFBOCallbacksSet) {
+  auto& context = GetEmbedderContext();
+
+  EmbedderConfigBuilder builder(context);
+  builder.SetOpenGLRendererConfig(SkISize::Make(600, 1024));
+  builder.SetOpenGLFBOCallBack();
+
+  auto engine = builder.LaunchEngine();
+  ASSERT_FALSE(engine.is_valid());
 }
 
 }  // namespace testing

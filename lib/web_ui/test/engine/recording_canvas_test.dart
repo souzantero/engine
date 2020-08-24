@@ -3,13 +3,18 @@
 // found in the LICENSE file.
 
 // @dart = 2.6
+import 'package:test/bootstrap/browser.dart';
+import 'package:test/test.dart';
 import 'package:ui/ui.dart';
 import 'package:ui/src/engine.dart';
-import 'package:test/test.dart';
 
 import '../mock_engine_canvas.dart';
 
 void main() {
+  internalBootstrapBrowserTest(() => testMain);
+}
+
+void testMain() {
   RecordingCanvas underTest;
   MockEngineCanvas mockCanvas;
   final Rect screenRect = Rect.largest;
@@ -186,6 +191,14 @@ void main() {
     expect(mockCanvas.methodCallLog[1].methodName, 'save');
     expect(mockCanvas.methodCallLog[2].methodName, 'restore');
     expect(mockCanvas.methodCallLog[3].methodName, 'endOfPaint');
+  });
+
+  // Regression test for https://github.com/flutter/flutter/issues/61697.
+  test('Allows restore calls after recording has ended', () {
+    final RecordingCanvas rc = RecordingCanvas(Rect.fromLTRB(0, 0, 200, 400));
+    rc.endRecording();
+    // Should not throw exception on restore.
+    expect(() => rc.restore(), returnsNormally);
   });
 }
 

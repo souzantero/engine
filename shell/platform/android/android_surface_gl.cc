@@ -43,7 +43,7 @@ bool AndroidSurfaceGL::IsValid() const {
 }
 
 std::unique_ptr<Surface> AndroidSurfaceGL::CreateGPUSurface(
-    GrContext* gr_context) {
+    GrDirectContext* gr_context) {
   if (gr_context) {
     return std::make_unique<GPUSurfaceGL>(sk_ref_sp(gr_context), this, true);
   }
@@ -115,7 +115,7 @@ bool AndroidSurfaceGL::GLContextPresent() {
   return onscreen_surface_->SwapBuffers();
 }
 
-intptr_t AndroidSurfaceGL::GLContextFBO() const {
+intptr_t AndroidSurfaceGL::GLContextFBO(GLFrameInfo frame_info) const {
   FML_DCHECK(IsValid());
   // The default window bound framebuffer on Android.
   return 0;

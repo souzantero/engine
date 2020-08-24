@@ -15,14 +15,22 @@ namespace flutter {
 ///
 class ShellTestExternalViewEmbedder final : public ExternalViewEmbedder {
  public:
-  using EndFrameCallBack = std::function<void(bool)>;
+  using EndFrameCallBack =
+      std::function<void(bool, fml::RefPtr<fml::RasterThreadMerger>)>;
 
   ShellTestExternalViewEmbedder(const EndFrameCallBack& end_frame_call_back,
-                                PostPrerollResult post_preroll_result)
-      : end_frame_call_back_(end_frame_call_back),
-        post_preroll_result_(post_preroll_result) {}
+                                PostPrerollResult post_preroll_result,
+                                bool support_thread_merging);
 
   ~ShellTestExternalViewEmbedder() = default;
+
+  // Updates the post preroll result so the |PostPrerollAction| after always
+  // returns the new `post_preroll_result`.
+  void UpdatePostPrerollResult(PostPrerollResult post_preroll_result);
+
+  // Updates the post preroll result to `PostPrerollResult::kResubmitFrame` for
+  // only the next frame.
+  void SetResubmitOnce();
 
  private:
   // |ExternalViewEmbedder|
@@ -31,7 +39,7 @@ class ShellTestExternalViewEmbedder final : public ExternalViewEmbedder {
   // |ExternalViewEmbedder|
   void BeginFrame(
       SkISize frame_size,
-      GrContext* context,
+      GrDirectContext* context,
       double device_pixel_ratio,
       fml::RefPtr<fml::RasterThreadMerger> raster_thread_merger) override;
 
@@ -51,7 +59,7 @@ class ShellTestExternalViewEmbedder final : public ExternalViewEmbedder {
   SkCanvas* CompositeEmbeddedView(int view_id) override;
 
   // |ExternalViewEmbedder|
-  bool SubmitFrame(GrContext* context,
+  void SubmitFrame(GrDirectContext* context,
                    std::unique_ptr<SurfaceFrame> frame) override;
 
   // |ExternalViewEmbedder|
@@ -62,8 +70,14 @@ class ShellTestExternalViewEmbedder final : public ExternalViewEmbedder {
   // |ExternalViewEmbedder|
   SkCanvas* GetRootCanvas() override;
 
+  // |ExternalViewEmbedder|
+  bool SupportsDynamicThreadMerging() override;
+
   const EndFrameCallBack end_frame_call_back_;
-  const PostPrerollResult post_preroll_result_;
+  PostPrerollResult post_preroll_result_;
+  bool resubmit_once_;
+
+  bool support_thread_merging_;
 
   FML_DISALLOW_COPY_AND_ASSIGN(ShellTestExternalViewEmbedder);
 };

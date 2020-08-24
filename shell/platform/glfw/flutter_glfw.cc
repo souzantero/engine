@@ -1,6 +1,7 @@
 // Copyright 2013 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+// FLUTTER_NOLINT
 
 #include "flutter/shell/platform/glfw/public/flutter_glfw.h"
 
@@ -183,6 +184,9 @@ static FlutterDesktopMessage ConvertToDesktopMessage(
 // that a screen coordinate is one dp.
 static double GetScreenCoordinatesPerInch() {
   auto* primary_monitor = glfwGetPrimaryMonitor();
+  if (primary_monitor == nullptr) {
+    return kDpPerInch;
+  }
   auto* primary_monitor_mode = glfwGetVideoMode(primary_monitor);
   int primary_monitor_width_mm;
   glfwGetMonitorPhysicalSize(primary_monitor, &primary_monitor_width_mm,
